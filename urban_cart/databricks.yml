@@ -11,10 +11,10 @@ include:
 variables:
   catalog:
     description: catalog to use
-    default: urban_cart
+    default: urban_cart_dev
   schema:
     description: The schema to use
-    default: bronze
+    default: ${workspace.current_user.short_name}
 targets:
   dev:
     # The default target uses 'mode: development' to create a development copy.
