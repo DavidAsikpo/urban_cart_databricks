@@ -2,8 +2,8 @@
 
 resources:
   jobs:
-    sample_job:
-      name: sample_job
+    injest_dimensions:
+      name: injest_dimensions
 
       trigger:
         # Run this job every day, exactly one day from the last run; see https://docs.databricks.com/api/workspace/jobs/create#trigger
@@ -24,7 +24,7 @@ resources:
       tasks:
         - task_key: notebook_task
           notebook_task:
-            notebook_path: ../src/sample_notebook.ipynb
+            notebook_path: urban_cart\src\bronze\injest_dimensions.py
         - task_key: refresh_pipeline
           depends_on:
             - task_key: notebook_task

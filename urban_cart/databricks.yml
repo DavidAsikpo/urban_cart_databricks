@@ -10,10 +10,11 @@ include:
 # Variable declarations. These variables are assigned in the dev/prod targets below.
 variables:
   catalog:
-    description: The catalog to use
+    description: catalog to use
+    default: urban_cart
   schema:
     description: The schema to use
-
+    default: bronze
 targets:
   dev:
     # The default target uses 'mode: development' to create a development copy.
@@ -25,7 +26,7 @@ targets:
     workspace:
       host: https://dbc-237a52c1-219a.cloud.databricks.com
     variables:
-      catalog: urban_cart
+      catalog: urban_cart_dev
       schema: ${workspace.current_user.short_name}
   prod:
     mode: production
