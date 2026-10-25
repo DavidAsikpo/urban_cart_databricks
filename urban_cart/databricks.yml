@@ -27,7 +27,9 @@ targets:
       host: https://dbc-237a52c1-219a.cloud.databricks.com
     variables:
       catalog: urban_cart_dev
-      schema: ${workspace.current_user.short_name}
+      bronze_schema: ${workspace.current_user.short_name}
+      silver_schema: ${workspace.current_user.short_name}
+      gold_schema: ${workspace.current_user.short_name}
   prod:
     mode: production
     workspace:
@@ -36,7 +38,9 @@ targets:
       root_path: /Workspace/Users/asikpodavid2@gmail.com/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: urban_cart
-      schema: prod
+      bronze_schema: bronze
+      silver_schema: silver
+      gold_schema: gold
     permissions:
       - user_name: asikpodavid2@gmail.com
         level: CAN_MANAGE
