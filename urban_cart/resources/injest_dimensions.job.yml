@@ -26,6 +26,9 @@ resources:
           environment_key: default
           notebook_task:
             notebook_path: ../src/bronze/injest_dimensions.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.bronze_schema}
 
 
       environments:
