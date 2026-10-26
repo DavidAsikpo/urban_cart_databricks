@@ -33,7 +33,7 @@ except NameError:
     CATALOG = "urban_cart_dev"
     SCHEMA = "asikpodavid2"
 
-VOLUME_BASE = "/Volumes/urban_cart/urban_cart_bronze/landing_zone/dimensions"
+VOLUME_BASE = "/Volumes/urban_cart/bronze/landing_zone/dimensions"
 
 print(f"Target: {CATALOG}.{SCHEMA}")
 
