@@ -22,7 +22,7 @@ resources:
           default: ${var.bronze_schema}
 
       tasks:
-        - task_key: notebook_task
+        - task_key: inventorty_task
           environment_key: default
           notebook_task:
             notebook_path: ../src/bronze/injest_inventory.py
@@ -30,7 +30,7 @@ resources:
               catalog: ${var.catalog}
               schema: ${var.bronze_schema}
 
-        - task_key: notebook_task
+        - task_key: orders_task
           environment_key: default
           notebook_task:
             notebook_path: ../src/bronze/injest_orders.py
@@ -38,7 +38,7 @@ resources:
               catalog: ${var.catalog}
               schema: ${var.bronze_schema}
 
-        - task_key: notebook_task
+        - task_key: returns_task
           environment_key: default
           notebook_task:
             notebook_path: ../src/bronze/injest_returns.py
@@ -46,7 +46,7 @@ resources:
               catalog: ${var.catalog}
               schema: ${var.bronze_schema}
 
-        - task_key: notebook_task
+        - task_key: order_items_task
           environment_key: default
           notebook_task:
             notebook_path: ../src/bronze/injest_order_items.py
