@@ -23,7 +23,6 @@ from pyspark.sql import functions as F
 # COMMAND ----------
 
 # Config: catalog/schema arrive as job parameters (via widgets) when deployed.
-# The fallback is for local Connect runs and deliberately points at DEV, never prod.
 try:
     dbutils.widgets.text("catalog", "urban_cart_dev")
     dbutils.widgets.text("schema", "asikpodavid2")
@@ -33,8 +32,6 @@ except NameError:
     CATALOG = "urban_cart_dev"
     SCHEMA = "asikpodavid2"
 
-VOLUME_BASE = "/Volumes/urban_cart/bronze/landing_zone/dimensions"
-
 print(f"Target: {CATALOG}.{SCHEMA}")
 
 # COMMAND ----------
@@ -43,18 +40,22 @@ print(f"Target: {CATALOG}.{SCHEMA}")
 DIMENSIONS = [
     {
         "table_name": "customers_raw",
-        "file_name": "customers.csv",
         "key_column": "customer_id",
+        "file_type": "json",
+        "is_cdc": True,
+        "volume_path": "/Volumes/urban_cart/bronze/landing_zone/dimensions/customers/*.json",
         "schema": (
             "customer_id string, first_name string, last_name string, "
             "email string, signup_date date, country string, "
-            "marketing_opt_in boolean"
+            "marketing_opt_in boolean, op string, seq int, event_ts timestamp"
         ),
     },
     {
         "table_name": "products_raw",
-        "file_name": "products.csv",
         "key_column": "product_id",
+        "file_type": "csv",
+        "is_cdc": False,
+        "volume_path": "/Volumes/urban_cart/bronze/landing_zone/dimensions/products.csv",
         "schema": (
             "product_id string, product_name string, category_raw string, "
             "unit_price double, cost_price double, active boolean"
@@ -62,14 +63,18 @@ DIMENSIONS = [
     },
     {
         "table_name": "warehouses_raw",
-        "file_name": "warehouses.csv",
         "key_column": "warehouse_id",
+        "file_type": "csv",
+        "is_cdc": False,
+        "volume_path": "/Volumes/urban_cart/bronze/landing_zone/dimensions/warehouses.csv",
         "schema": "warehouse_id string, warehouse_name string, region string",
     },
     {
         "table_name": "promotions_raw",
-        "file_name": "promotions.csv",
         "key_column": "promo_code",
+        "file_type": "csv",
+        "is_cdc": False,
+        "volume_path": "/Volumes/urban_cart/bronze/landing_zone/dimensions/promotions.csv",
         "schema": (
             "promo_code string, description string, discount_pct int, "
             "valid_from date, valid_to date"
@@ -79,22 +84,22 @@ DIMENSIONS = [
 
 # COMMAND ----------
 
-def ingest_dimension(table_name: str, file_name: str, schema: str) -> int:
-    """Batch-load one dimension CSV into its bronze table. Returns row count."""
+def ingest_dimension(table_name: str, schema: str, file_type: str, volume_path: str) -> int:
+    """Batch-load one dimension file or batch directory into its bronze table."""
     full_table_name = f"{CATALOG}.{SCHEMA}.{table_name}"
-    file_path = f"{VOLUME_BASE}/{file_name}"
+    headers_opt = ", header => true" if file_type.lower() == "csv" else ""
 
     spark.sql(f"""
         CREATE OR REPLACE TABLE {full_table_name} AS
         SELECT
             *,
             current_timestamp() AS _ingested_at,
-            '{file_path}' AS _source_file
+            _metadata.file_path AS _source_file
         FROM read_files(
-            '{file_path}',
-            format => 'csv',
-            header => true,
+            '{volume_path}',
+            format => '{file_type}',
             schema => '{schema}'
+            {headers_opt}
         )
     """)
 
@@ -104,10 +109,15 @@ def ingest_dimension(table_name: str, file_name: str, schema: str) -> int:
 
 # COMMAND ----------
 
-def validate_tables(table_name: str, schema_name: str,key_column: str) -> None:
-    full_table_name = f'{CATALOG}.{schema_name}.{table_name}'
+def validate_tables(table_name: str, schema_name: str, key_column: str) -> None:
+    full_table_name = f"{CATALOG}.{schema_name}.{table_name}"
 
-    dupes = (spark.table(full_table_name).groupby(key_column).agg(F.count("*").alias("n")).filter(F.col("n") > 1))
+    dupes = (
+        spark.table(full_table_name)
+        .groupBy(key_column)
+        .agg(F.count("*").alias("n"))
+        .filter(F.col("n") > 1)
+    )
     dupe_count = dupes.count()
 
     if dupe_count > 0:
@@ -116,27 +126,27 @@ def validate_tables(table_name: str, schema_name: str,key_column: str) -> None:
             f"Uniqueness check failed on {full_table_name}.{key_column}: "
             f"{dupe_count} duplicate key(s) found. Sample: {sample}"
         )
-    print(f"  {full_table_name}.{key_column}: unique, {dupe_count} violations")
-
+    print(f"  {full_table_name}.{key_column}: unique, 0 duplicate keys")
 
 # COMMAND ----------
 
-def check_nulls(table_name: str, schema_name: str,key_column: str) -> None:
-    full_table_name = f'{CATALOG}.{schema_name}.{table_name}'
+def check_nulls(table_name: str, schema_name: str, key_column: str) -> None:
+    full_table_name = f"{CATALOG}.{schema_name}.{table_name}"
 
-    nulls = (spark.table(full_table_name).filter(F.col(key_column).isNull()))
+    nulls = spark.table(full_table_name).filter(F.col(key_column).isNull())
     nulls_count = nulls.count()
 
     if nulls_count > 0:
-        display(nulls.limit(5))
+        try:
+            display(nulls.limit(5))
+        except NameError:
+            nulls.limit(5).show(truncate=False)
+            
         raise ValueError(
-            f"null check failed on {full_table_name}.{key_column}: "
-            f"{nulls_count} null key(s) found. see Sample above" 
+            f"Null check failed on {full_table_name}.{key_column}: "
+            f"{nulls_count} null key(s) found."
         )
-    print(f"{full_table_name}.{key_column}: nulls, {nulls_count} nulls")
-
-
-
+    print(f"  {full_table_name}.{key_column}: 0 nulls")
 
 # COMMAND ----------
 
@@ -146,10 +156,24 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
 print(f"Ingesting dimensions into {CATALOG}.{SCHEMA} ...")
 total = 0
 for dim in DIMENSIONS:
-    total += ingest_dimension(dim["table_name"], dim["file_name"], dim["schema"])
-print(f"Done. {total} total rows across {len(DIMENSIONS)} dimension tables.")
-for dim in DIMENSIONS:
-    check_nulls(dim["table_name"], SCHEMA, dim["key_column"])
-    validate_tables(dim["table_name"], SCHEMA, dim["key_column"])
-print(f"Done validating {len(DIMENSIONS)} tables.")
+    total += ingest_dimension(
+        table_name=dim["table_name"],
+        schema=dim["schema"],
+        file_type=dim["file_type"],
+        volume_path=dim["volume_path"]
+    )
+print(f"Done. {total} total rows across {len(DIMENSIONS)} dimension tables.\n")
 
+print("Validating tables...")
+for dim in DIMENSIONS:
+    # 1. Null checks apply to all tables (even CDC streams must have non-null keys)
+    check_nulls(dim["table_name"], SCHEMA, dim["key_column"])
+    
+    # 2. Skip uniqueness check for CDC batch feeds
+    if dim.get("is_cdc", False):
+        print(f"  {dim['table_name']}.{dim['key_column']}: skipped uniqueness check (CDC multi-event batch)")
+        continue
+
+    validate_tables(dim["table_name"], SCHEMA, dim["key_column"])
+
+print(f"Done validating {len(DIMENSIONS)} tables.")
